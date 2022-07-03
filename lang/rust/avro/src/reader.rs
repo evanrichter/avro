@@ -114,6 +114,12 @@ impl<R: Read> Block<R> {
         //    We need to resize to ensure that the buffer len is safe to read `n` elements.
         //
         // TODO: Figure out a way to avoid having to truncate for the second case.
+        if n > 2048 {
+            return Err(Error::MemoryAllocation {
+                desired: n,
+                maximum: 1337,
+            });
+        }
         self.buf.resize(n, 0);
         self.reader
             .read_exact(&mut self.buf)
@@ -179,6 +185,10 @@ impl<R: Read> Block<R> {
         let mut block_bytes = &self.buf[self.buf_idx..];
         let b_original = block_bytes.len();
         let item = from_avro_datum(&self.writer_schema, &mut block_bytes, read_schema)?;
+        if b_original == block_bytes.len() {
+            // the block read did not consume any bytes, return an error otherwise there is an infinite loop
+            return Err(Error::ReadBlock);
+        }
         self.buf_idx += b_original - block_bytes.len();
         self.message_count -= 1;
         Ok(Some(item))
